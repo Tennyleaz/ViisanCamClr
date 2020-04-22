@@ -29,6 +29,41 @@ typedef long(*camGetImageCusCropRect)(long devIndex, long& left, long& top, long
 
 int main()
 {
+    int* p = nullptr;
+    int a = 3;
+    p = &a;
+    printf("%d\n", *p);
+
+    *p++;  // wrong
+    printf("%d\n", *p);
+
+    p = &a;
+    *++p; // wrong
+    printf("%d\n", *p);
+
+    p = &a;
+    ++(*p);
+    printf("%d\n", *p);
+
+    int s[] = { 3,6,9,12,18 };
+    int* p2 = +s;
+
+    int i = 1;
+    i = i << 1;
+    printf("%d\n", i);
+
+    i = 1;
+    i = i >> 2;
+    printf("%d\n", i);
+
+    i = -1;
+    i = i << 1;
+    printf("%d\n", i);
+
+    i = -1;
+    i = i >> 1;
+    printf("%d\n", i);
+
     wstring dllName = L"CmCapture.dll";
     HMODULE m_hMod = LoadLibrary(dllName.c_str());
     if (m_hMod == nullptr)    

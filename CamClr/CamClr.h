@@ -5,7 +5,7 @@ using namespace System;
 using namespace System::Runtime::InteropServices;
 
 namespace CamClr {
-	//错误码
+	/// <summary>錯誤代碼，0 代表正常</summary>
 	public enum class CAMSDK_ERR : long
 	{
 		ERR_NONE = 0x0000,		//无错误
@@ -62,6 +62,7 @@ namespace CamClr {
 		CMSIGN_ERROR_FILETYPE = 2000,//文件保存类型错误
 	};
 
+	/// <summary>自動裁切</summary>
 	public enum class CropType : long
 	{
 		None = 0,
@@ -71,11 +72,26 @@ namespace CamClr {
 		CropFace
 	};
 
+	/// <summary>連拍設定</summary>
+	public enum class AutoCaptureType : long
+	{
+		Monitor = 0,
+		FixTime = 1
+	};
+
+	/// <summary>相機解析度</summary>
+	public value struct Resolution
+	{
+	public:
+		long Width, Height;
+	};
+
 	// DLL function signature  
 	typedef CAMSDK_ERR(*camInitCameraLib)();
 	typedef CAMSDK_ERR(*camUnInitCameraLib)();
 	typedef long(*camGetDevCount)(long& count);
 	typedef CAMSDK_ERR(*camGetDevCountCur)(long& count);
+	// 裝置資訊
 	typedef char* (*camGetDevName)(long devIndex);
 	typedef long(*camGetFwVersion)(int devIndex, char* cVersion);
 	typedef long(*camGetLensModel)(int devIndex, char* cLensModel);
@@ -84,16 +100,31 @@ namespace CamClr {
 	typedef long(*camSetImageAutoCrop)(long devIndex, long CropType);
 	typedef CAMSDK_ERR(*camOpenDev)(long devIndex, long subtype, long width, long height);
 	typedef long(*camCloseDev)(long devIndex);
-	typedef long(*camSetImageJPGQuanlity)(long devIndex, long quanlity);
-	typedef long(*camGetCurResolution)(long devIndex, long& subtype, long& width, long& height);
+	typedef long(*camSetImageJPGQuanlity)(long devIndex, long quanlity);	
 	typedef bool (CALLBACK* callBackPreviewImage)(unsigned char src, long width, long height, long size);
 	typedef CAMSDK_ERR(*camRegCallBackPreviewImage)(long devIndex, callBackPreviewImage fun);
 	typedef CAMSDK_ERR(*camSetPreviewWindow)(long devIndex, HWND hPreviewWindow);
 	typedef long(*camSetImageDPI)(long devIndex, long xDPI, long yDPI);
 	typedef long(*camSetImageCusCropRect)(long devIndex, long left, long top, long right, long bottom);
 	typedef long(*camGetImageCusCropRect)(long devIndex, long& left, long& top, long& right, long& bottom);
+	// 設定視窗
 	typedef long(*camShowImageSettingWindow)(long devIndex);
 	typedef long(*camShowDevSettingWindow)(long devIndex);
+	// 解析度
+	typedef long(*camGetResolutionCount)(long devIndex, long subtype, long& count);
+	typedef long(*camGetResolution)(long devIndex, long subtype, long index, long& width, long& height);
+	typedef long(*camSetResolution)(long devIndex, long width, long height);
+	typedef long(*camGetCurResolution)(long devIndex, long& subtype, long& width, long& height);
+	// 圖片效果
+	typedef long(*camSetImageDenoise)(long devIndex, bool IsAvailabel);
+	typedef long(*camSetImageOffsetCorrection)(long devIndex, long type);
+	// 連拍
+	typedef bool(CALLBACK* callBackAutoCapture)(long state);  // 連拍的 callback
+	typedef long(*camStartAutoCapture)(long devIndex, long type, long param, callBackAutoCapture fun);
+	typedef long(*camPauseAutoCapture)(long devIndex, long lstype);
+	typedef long(*camStopAutoCapture)(long devIndex);
+	// C++/CLI delegate
+	public delegate void AutoCaptureDelgate(long state);
 
 	public ref class Cam
 	{
@@ -122,43 +153,78 @@ namespace CamClr {
 		camGetImageCusCropRect getImageCropRect;
 		camShowImageSettingWindow showImageSetting;
 		camShowDevSettingWindow showVideoSetting;
+		camGetResolutionCount getResolutionCount;
+		camGetResolution getResolution;
+		camSetResolution setResolution;
+		camSetImageDenoise setImageDenoise;
+		camSetImageOffsetCorrection setOffsetCorrection;
+		camStartAutoCapture startAutoCapture;
+		camPauseAutoCapture pauseAutoCapture;
+		camStopAutoCapture stopAutoCapture;
+		//callBackAutoCapture callback2;
 
 		static const char* string_to_char_array(String^ string)
 		{
 			const char* str = (const char*)(Marshal::StringToHGlobalAnsi(string)).ToPointer();
 			return str;
 		}
+		bool CALLBACK callback(long state);
 
 	public:
 		~Cam();
-		/// <summary>
-		/// 先LoadLibrary再取得所有函數位址，最後初始化相機。
-		/// </summary>
+		/// <summary>先LoadLibrary再取得所有函數位址，最後初始化相機。</summary>
 		CAMSDK_ERR Init();
+		/// <summary>獲取攝像頭個數，-1即失敗。</summary>
 		long GetDeviceCount();
+		/// <summary>獲取設備名(攝像頭在裝置管理員中的名稱)</summary>
+		/// <param name="deviceIndex">設備ID，即攝像頭序號,0號開始</param>
 		String^ GetDeviceName(long deviceIndex);
+		/// <summary>獲取鏡頭型號</summary>
 		CAMSDK_ERR GetModles(long deviceIndex, [Out]String^% fwVersion, [Out]String^% model, [Out]String^% vid_pid);
-		/// <summary>
-		/// 開啟影像裝置
-		/// </summary>
+		/// <summary>開啟影像裝置</summary>
 		/// <param name="deviceIndex">設備ID，即攝像頭序號,0號開始</param>
 		/// <param name="subType">媒體格式ID，不同設備支援的格式可能不同，常見 0=mjpeg，1=yuy2，不支援mjpeg的設備則 0=yuy2。</param>
 		/// <param name="width">指定解析度的寬(設置0 為最大解析度的寬)</param>
 		/// <param name="height">指定解析度的高(設置0 為最大解析度的高)</param>
 		CAMSDK_ERR OpenDevice(long deviceIndex, long subType, long width, long height);
+		/// <summary>關閉影像裝置</summary>
+		/// <param name="deviceIndex">設備ID，即攝像頭序號,0號開始</param>
 		CAMSDK_ERR CloseDevice(long deviceIndex);
+		/// <summary>自動裁切；CropType=0~5 </summary>
+		/// <param name="deviceIndex">設備ID，即攝像頭序號,0號開始</param>
+		/// <param name="cropType">裁切方式</param>
 		CAMSDK_ERR SetAutoCrop(long deviceIndex, CropType cropType);
+		/// <summary>設置JPG壓縮率，100=不壓縮，品質最好。默認壓縮率為55。</summary>
 		CAMSDK_ERR SetJpegQuality(long deviceIndex, long quality);
+		/// <summary>設置圖片DPI (X Y DPI要一致，否則以X解析度為准)</summary>
 		CAMSDK_ERR SetDpi(long deviceIndex, long xDpi, long yDpi);
-		/// <summary>
-		/// 獲得當前視頻格式及解析度。
-		/// </summary>
-		CAMSDK_ERR GetCurrentResolution(long deviceIndex, [Out]long% subType, [Out]long% width, [Out]long% height);
+		/// <summary>獲得當前視頻格式及解析度。</summary>
+		CAMSDK_ERR GetCurrentResolution(long deviceIndex, [Out]long% subType, [Out]Resolution% resolution);
+		/// <summary>獲取解析度個數，-1即失敗。</summary>
+		long GetResolutionCount(long deviceIndex, long subType);
+		/// <summary>獲取指定 ID 的解析度</summary>
+		CAMSDK_ERR GetResolution(long deviceIndex, long subType, long index, [Out]Resolution% resolution);
+		/// <summary>設置指定 ID 的解析度</summary>
+		CAMSDK_ERR SetResolution(long deviceIndex, Resolution resolution);
+		/// <summary>拍照至檔案，多圖裁切時返回以分號為分隔的多個全路徑。</summary>
 		CAMSDK_ERR CaptureFile(long deviceIndex, String^% filePath);
+		/// <summary>設置裁切區域</summary>
 		CAMSDK_ERR SetImageCropRect(long deviceIndex, long left, long top, long right, long bottom);
+		/// <summary>獲取裁切區域</summary>
 		CAMSDK_ERR GetImageCropRect(long deviceIndex);
+		/// <summary>彈出“視頻效果”設置視窗</summary>
 		CAMSDK_ERR ShowImageSetting(long deviceIndex);
+		/// <summary>彈出“視頻屬性”設置視窗</summary>
 		CAMSDK_ERR ShowVideoSetting(long deviceIndex);
+		/// <summary>去噪</summary>
+		CAMSDK_ERR SetDenoise(long deviceIndex, bool enable);
+		/// <summary>印刷偏移矯正</summary>
+		CAMSDK_ERR SetOffsetCorrection(long deviceIndex, bool enable);
+		CAMSDK_ERR StartAutoCapture(long deviceIndex, AutoCaptureType type, long param);
+		CAMSDK_ERR PauseAutoCapture(long deviceIndex, AutoCaptureType type);
+		CAMSDK_ERR StopAutoCapture(long deviceIndex);
+		/// <summary>反初始化裝置 Library</summary>
 		bool UnInit();
+		event AutoCaptureDelgate^ MyEvent;
 	};
 }

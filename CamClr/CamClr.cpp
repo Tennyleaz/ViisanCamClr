@@ -5,6 +5,13 @@
 using namespace std;
 using namespace CamClr;
 
+bool CamClr::Cam::callback(long state)
+{
+    cout << "callback state=" << state << endl;
+    MyEvent(state);
+    return false;
+}
+
 CamClr::Cam::~Cam()
 {
     if (m_hMod != nullptr)
@@ -171,6 +178,62 @@ CAMSDK_ERR CamClr::Cam::Init()
         return CAMSDK_ERR::ERR_INIT;
     }
 
+    getResolutionCount = (camGetResolutionCount)GetProcAddress(m_hMod, "camGetResolutionCount");
+    if (getResolutionCount == nullptr)
+    {
+        cout << "Get camGetResolutionCount address failed.\n";
+        return CAMSDK_ERR::ERR_INIT;
+    }
+
+    getResolution = (camGetResolution)GetProcAddress(m_hMod, "camGetResolution");
+    if (getResolution == nullptr)
+    {
+        cout << "Get camGetResolution address failed.\n";
+        return CAMSDK_ERR::ERR_INIT;
+    }
+
+    setResolution = (camSetResolution)GetProcAddress(m_hMod, "camSetResolution");
+    if (setResolution == nullptr)
+    {
+        cout << "Get camSetResolution address failed.\n";
+        return CAMSDK_ERR::ERR_INIT;
+    }
+
+    setImageDenoise = (camSetImageDenoise)GetProcAddress(m_hMod, "camSetImageDenoise");
+    if (setImageDenoise == nullptr)
+    {
+        cout << "Get camSetImageDenoise address failed.\n";
+        return CAMSDK_ERR::ERR_INIT;
+    }
+
+    setOffsetCorrection = (camSetImageOffsetCorrection)GetProcAddress(m_hMod, "camSetImageOffsetCorrection");
+    if (setOffsetCorrection == nullptr)
+    {
+        cout << "Get camSetImageOffsetCorrection address failed.\n";
+        return CAMSDK_ERR::ERR_INIT;
+    }
+
+    startAutoCapture = (camStartAutoCapture)GetProcAddress(m_hMod, "camStartAutoCapture");
+    if (startAutoCapture == nullptr)
+    {
+        cout << "Get camStartAutoCapture address failed.\n";
+        return CAMSDK_ERR::ERR_INIT;
+    }
+
+    pauseAutoCapture = (camPauseAutoCapture)GetProcAddress(m_hMod, "camPauseAutoCapture");
+    if (pauseAutoCapture == nullptr)
+    {
+        cout << "Get camPauseAutoCapture address failed.\n";
+        return CAMSDK_ERR::ERR_INIT;
+    }
+
+    stopAutoCapture = (camStopAutoCapture)GetProcAddress(m_hMod, "camStopAutoCapture");
+    if (stopAutoCapture == nullptr)
+    {
+        cout << "Get camStopAutoCapture address failed.\n";
+        return CAMSDK_ERR::ERR_INIT;
+    }
+
     return init();
 }
 
@@ -251,15 +314,21 @@ CAMSDK_ERR CamClr::Cam::SetDpi(long deviceIndex, long xDpi, long yDpi)
     return (CAMSDK_ERR)setDPI(deviceIndex, xDpi, yDpi);
 }
 
-CAMSDK_ERR CamClr::Cam::GetCurrentResolution(long deviceIndex, long% subType, long% width, long% height)
+CAMSDK_ERR CamClr::Cam::GetCurrentResolution(long deviceIndex, long% subType, Resolution% resolution)
 {
     long local_subType = 0, local_width = 0, local_height = 0;
     CAMSDK_ERR err = (CAMSDK_ERR)getCurrentResolution(deviceIndex, local_subType, local_width, local_height);
     if (err == CAMSDK_ERR::ERR_NONE)
     {
         subType = local_subType;
-        width = local_width;
-        height = local_height;
+        resolution.Width = local_width;
+        resolution.Height = local_height;
+    }
+    else
+    {
+        subType = 0;
+        resolution.Width = 0;
+        resolution.Height = 0;
     }
     return err;
 }
@@ -302,6 +371,69 @@ CAMSDK_ERR CamClr::Cam::ShowImageSetting(long deviceIndex)
 CAMSDK_ERR CamClr::Cam::ShowVideoSetting(long deviceIndex)
 {
     CAMSDK_ERR err = (CAMSDK_ERR)showVideoSetting(deviceIndex);
+    return err;
+}
+
+CAMSDK_ERR CamClr::Cam::SetDenoise(long deviceIndex, bool enable)
+{
+    CAMSDK_ERR err = (CAMSDK_ERR)setImageDenoise(deviceIndex, (long)enable);
+    return err;
+}
+
+CAMSDK_ERR CamClr::Cam::SetOffsetCorrection(long deviceIndex, bool enable)
+{
+    CAMSDK_ERR err = (CAMSDK_ERR)setOffsetCorrection(deviceIndex, (long)enable);
+    return err;
+}
+
+CAMSDK_ERR CamClr::Cam::StartAutoCapture(long deviceIndex, AutoCaptureType type, long param)
+{
+    callBackAutoCapture fPointer = (callBackAutoCapture)&(this->callback);
+    CAMSDK_ERR err = (CAMSDK_ERR)startAutoCapture(deviceIndex, (long)type, param, fPointer);
+    return err;
+}
+
+CAMSDK_ERR CamClr::Cam::PauseAutoCapture(long deviceIndex, AutoCaptureType type)
+{
+    CAMSDK_ERR err = (CAMSDK_ERR)pauseAutoCapture(deviceIndex, (long)type);
+    return err;
+}
+
+CAMSDK_ERR CamClr::Cam::StopAutoCapture(long deviceIndex)
+{
+    CAMSDK_ERR err = (CAMSDK_ERR)stopAutoCapture(deviceIndex);
+    return err;
+}
+
+long CamClr::Cam::GetResolutionCount(long deviceIndex, long subType)
+{
+    long count;
+    CAMSDK_ERR err = (CAMSDK_ERR)getResolutionCount(deviceIndex, subType, count);
+    if (err == CAMSDK_ERR::ERR_NONE)
+        return count;
+    return -1;
+}
+
+CAMSDK_ERR CamClr::Cam::GetResolution(long deviceIndex, long subType, long index, Resolution% resolution)
+{
+    long width, height;
+    CAMSDK_ERR err = (CAMSDK_ERR)getResolution(deviceIndex, subType, index, width, height);
+    if (err == CAMSDK_ERR::ERR_NONE)
+    {
+        resolution.Width = width;
+        resolution.Height = height;
+    }
+    else
+    {
+        resolution.Width = 0;
+        resolution.Height = 0;
+    }
+    return err;
+}
+
+CAMSDK_ERR CamClr::Cam::SetResolution(long deviceIndex, Resolution resolution)
+{
+    CAMSDK_ERR err = (CAMSDK_ERR)setResolution(deviceIndex, resolution.Width, resolution.Height);
     return err;
 }
 
